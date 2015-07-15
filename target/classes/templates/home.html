@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:th="http://www.thymeleaf.org"
+      xmlns:sec="http://www.thymeleaf.org/thymeleaf-extras-springsecurity3">
+<head>
+    <title>Ghost Post</title>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js"></script>
+</head>
+<body>
+<br/>
+<div id="loadingDiv"><h3>Please wait while data is fetched. It may take upto 60 seconds.</h3></div>
+<div th:if="${param.error}">
+    Invalid username and password.
+</div>
+<div th:if="${param.logout}">
+    You have been logged out.
+</div>
+<div><label> Instagram user id : <input value="1574083" id="user_id" type="text" name="user_id"/> </label></div>
+<br/>
+<div><label> Number of best hours : <input value="3" id="top_hours" type="text" name="user_id"/> </label></div>
+<div><input id="btn-get-times" type="button" value="Show" /></div>
+<br/>
+<h3>The best times to post are: </h3>
+<div id="res-div"></div>
+</body>
+<script>
+    var $loading = $('#loadingDiv').hide();
+    $(document)
+            .ajaxStart(function () {
+                $loading.show();
+            })
+            .ajaxStop(function () {
+                $loading.hide();
+            });
+
+
+    $(document).ready(function(){
+        $("#btn-get-times").click(function(e){
+            e.preventDefault();
+            $.ajax({
+                type: "POST",
+                url: "/api/make_me_popular",
+                data: {'user_id' : $('#user_id').val(), 'num_hours' : $('#top_hours').val()},
+                success: function(data) {
+                    $("#res-div").text(data);
+                }});
+        });
+
+        $("#btn-auth").click(function(e){
+            e.preventDefault();
+            $.ajax({
+                type: "GET",
+                crossDomain: true,
+                dataType: "jsonp",
+                url: "https://instagram.com/oauth/authorize",
+                data: {"data": {
+                    "client_id": "b560c89704c143e7bcac8708b7c01f9c",
+                    "redirect_uri": "http://localhost:8080/api/auth/instagram/callback",
+                    "response_type": "token"
+                }},
+                success: function(otherData) {
+                    /*if (otherData.redirect) {
+                        $.ajax({
+                            type: "GET",
+                            data: {
+                                "access_token" : otherData.redirect.substring(otherData.redirect.indexOf('#')+1)
+                            },
+                            url:"/api/auth/instagram/callback"
+                        })
+                    }*/
+                }});
+        });
+    });
+</script>
+</html>

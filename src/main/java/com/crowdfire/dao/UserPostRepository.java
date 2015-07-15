@@ -8,8 +8,8 @@ import java.util.List;
 /**
  * Created by aniruddha@primaseller.com on 14/7/15.
  */
-public interface UserPostRepository extends CrudRepository<UserPost, Long> {
+public interface UserPostRepository extends CrudRepository<UserPost, String> {
 
-    List<UserPost> findByUserId(Long userId);
+    List<UserPost> findByUserId(String userId);
 
 }

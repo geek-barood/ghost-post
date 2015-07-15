@@ -18,7 +18,7 @@ public class UserPost implements Serializable {
     @GeneratedValue(strategy = GenerationType.AUTO)
     private Long id;
 
-    private Long userId;
+    private String userId;
 
     private Timestamp lastPostTimeStamp;
 
@@ -30,11 +30,11 @@ public class UserPost implements Serializable {
         this.id = id;
     }
 
-    public Long getUserId() {
+    public String getUserId() {
         return userId;
     }
 
-    public void setUserId(Long userId) {
+    public void setUserId(String userId) {
         this.userId = userId;
     }
 
