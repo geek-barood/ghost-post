@@ -3,10 +3,7 @@ package com.crowdfire.controller;
 import com.crowdfire.dao.FollowerRepository;
 import com.crowdfire.dao.UserPostRepository;
 import com.crowdfire.dao.UserRepository;
-import com.crowdfire.model.Follower;
-import com.crowdfire.model.FollowerResp;
-import com.crowdfire.model.User;
-import com.crowdfire.model.UserPost;
+import com.crowdfire.model.*;
 import com.crowdfire.service.BestTimeService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.gson.JsonArray;
@@ -16,9 +13,16 @@ import com.google.gson.JsonParser;
 import org.joda.time.DateTime;
 import org.slf4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.servlet.ModelAndView;
+import org.springframework.web.util.UriComponentsBuilder;
 
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletResponse;
@@ -28,8 +32,7 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.sql.Timestamp;
 import java.text.MessageFormat;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 /**
  * Created by aniruddha@primaseller.com on 14/7/15.
@@ -41,12 +44,13 @@ public class UserController {
 
     private static String FOLLOWER_ENDPOINT_URL = "https://api.instagram.com/v1/users/{0}/followed-by?access_token={1}";
     private static String POSTS_ENDPOINT_URL = "https://api.instagram.com/v1/users/{0}/media/recent/?access_token={1}";
-    private static String ACCESS_TOKEN = "2048655076.b560c89.8cfea09d85aa427a83c94a4bac8c59f0";
+    //private static String ACCESS_TOKEN = "2048655076.b560c89.8cfea09d85aa427a83c94a4bac8c59f0";
+    private static String ACCESS_TOKEN = null;
     private static String redirectUri = "http://localhost:8080/api/auth/instagram/callback";
     private static String CLIENT_ID = "b560c89704c143e7bcac8708b7c01f9c";
     private static String CLIENT_SECRET = "4ef66a95305643d7907ee6893a8f0815";
-    //private static Long demoUserId = 25025320L;
     private static String AUTH_URL = "https://instagram.com/oauth/authorize/?client_id=" + CLIENT_ID + "&redirect_uri=" + redirectUri + "&response_type=token";
+    private static String OAUTH_TOKEN_URL = "https://api.instagram.com/oauth/access_token";
 
     @Autowired
     private UserRepository userRepository;
@@ -63,15 +67,29 @@ public class UserController {
     Logger logger = org.slf4j.LoggerFactory.getLogger(getClass());
 
     @RequestMapping(method = RequestMethod.GET, value = "/auth/instagram/callback")
-    public String getAccessToken(@RequestParam(value = "access_token") String accessToken) {
-        logger.info("Got access token: " + accessToken);
-        ACCESS_TOKEN = accessToken;
-        return "";
-    }
+    public String fetchAccessToken(@RequestParam(value = "code") String code) {
+        logger.info("Got code: " + code);
 
-    @RequestMapping(method = RequestMethod.GET, value = "/authenticate")
-    public ModelAndView authenticateWithInstagram(HttpServletResponse response) {
-        return new ModelAndView("redirect:" + AUTH_URL);
+        MultiValueMap<String, String> params = new LinkedMultiValueMap<String, String>();
+        params.add("client_id", CLIENT_ID);
+        params.add("client_secret", CLIENT_SECRET);
+        params.add("grant_type", "authorization_code");
+        params.add("code", code);
+        params.add("redirect_uri", "http://localhost:8080/api/auth/instagram/callback");
+
+        HttpHeaders requestHeaders = new HttpHeaders();
+        requestHeaders.setContentType(MediaType.MULTIPART_FORM_DATA);
+
+        HttpEntity entity = new HttpEntity(params, requestHeaders);
+        try {
+            OauthResp oauthResp = new RestTemplate().postForObject(UriComponentsBuilder.fromHttpUrl(OAUTH_TOKEN_URL).toUriString(),
+                    entity, OauthResp.class);
+            ACCESS_TOKEN = oauthResp.getAccessToken();
+            logger.debug("access token: " + ACCESS_TOKEN);
+        } catch (RestClientException re) {
+            logger.error(re.toString());
+        }
+        return "";
     }
 
     @RequestMapping(method = RequestMethod.POST, value = "/followers/{userId}")
@@ -124,16 +142,25 @@ public class UserController {
     }
 
     @RequestMapping(method = RequestMethod.POST, value = "/make_me_popular")
-    public List<String> makeMePopular(@RequestParam(value = "user_id") Long userId, @RequestParam(value = "num_hours") int num) {
+    public List<String> makeMePopular(@RequestParam(value = "user_id") Long userId,
+                                      @RequestParam(value = "num_hours") int num,
+                                      @RequestParam(value = "day") int day) {
 
+        // Ideally this should run as a scheduled service
+        // But here I am fetching followers every time the user queries
         fetchFollowers(userId);
         for (Follower follower : followerRepository.findAll()) {
+            // This should also ideally be run as a scheduled service
             fetchLastPosts(Long.valueOf(follower.getFollowerId()));
         }
 
         List<String> bestTimes = new ArrayList<>();
-        for (Integer hour : bestTimeService.findBestTimesForUser(userId, num)) {
-            bestTimes.add(new DateTime().withHourOfDay(hour).withMinuteOfHour(0).toString("hh:mm a"));
+        try {
+            for (Integer hour : bestTimeService.findBestTimesForUser(userId, num, day)) {
+                bestTimes.add(new DateTime().withHourOfDay(hour).withMinuteOfHour(0).toString("hh:mm a"));
+            }
+        } catch (Exception e) {
+            return Arrays.asList(new String[]{e.getMessage()});
         }
         return bestTimes;
     }

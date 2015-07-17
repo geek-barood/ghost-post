@@ -17,8 +17,21 @@
 <div><label> Instagram user id : <input value="1574083" id="user_id" type="text" name="user_id"/> </label></div>
 <br/>
 <div><label> Number of best hours : <input value="3" id="top_hours" type="text" name="user_id"/> </label></div>
+<div><label> Select day</label>
+    <select id="day">
+        <option id="today" value="-1">Today</option>
+        <option value="0">Monday</option>
+        <option value="1">Tuesday</option>
+        <option value="2">Wednesday</option>
+        <option value="3">Thursday</option>
+        <option value="4">Friday</option>
+        <option value="5">Saturday</option>
+        <option value="6">Sunday</option>
+    </select>
+</div>
 <div><input id="btn-get-times" type="button" value="Show" /></div>
 <br/>
+<div><button id="btn-auth">Authenticate me!</button></div>
 <h3>The best times to post are: </h3>
 <div id="res-div"></div>
 </body>
@@ -34,12 +47,23 @@
 
 
     $(document).ready(function(){
+        // since Sunday is 0, Monday is 1, and so on, we need to adjust its value as per ISO
+        $("#today").get(0).setAttribute("value", ((new Date().getDay()-1+7)%7).toString());
         $("#btn-get-times").click(function(e){
             e.preventDefault();
             $.ajax({
                 type: "POST",
                 url: "/api/make_me_popular",
-                data: {'user_id' : $('#user_id').val(), 'num_hours' : $('#top_hours').val()},
+                data: {
+                    'user_id': $('#user_id').val(),
+                    'num_hours': $('#top_hours').val(),
+                    'day': $('#day').val()
+                },
+                statusCode: {
+                    500: function(xhr) {
+                        alert('500 status code! Please authenticate');
+                    }
+                },
                 success: function(data) {
                     $("#res-div").text(data);
                 }});
@@ -47,27 +71,17 @@
 
         $("#btn-auth").click(function(e){
             e.preventDefault();
-            $.ajax({
-                type: "GET",
-                crossDomain: true,
-                dataType: "jsonp",
-                url: "https://instagram.com/oauth/authorize",
-                data: {"data": {
-                    "client_id": "b560c89704c143e7bcac8708b7c01f9c",
-                    "redirect_uri": "http://localhost:8080/api/auth/instagram/callback",
-                    "response_type": "token"
-                }},
-                success: function(otherData) {
-                    /*if (otherData.redirect) {
-                        $.ajax({
-                            type: "GET",
-                            data: {
-                                "access_token" : otherData.redirect.substring(otherData.redirect.indexOf('#')+1)
-                            },
-                            url:"/api/auth/instagram/callback"
-                        })
-                    }*/
-                }});
+            var params = {
+                client_id: "b560c89704c143e7bcac8708b7c01f9c",
+                redirect_uri:"http://localhost:8080/api/auth/instagram/callback",
+                response_type: "code"
+            };
+            var authWindow = window.open("https://instagram.com/oauth/authorize?"
+                    + $.param(params), "Auth window");
+            /*setTimeout(function(){
+                authWindow.close();
+            }, 4000);*/
+
         });
     });
 </script>
