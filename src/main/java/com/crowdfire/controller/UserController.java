@@ -5,6 +5,7 @@ import com.crowdfire.dao.UserPostRepository;
 import com.crowdfire.dao.UserRepository;
 import com.crowdfire.model.*;
 import com.crowdfire.service.BestTimeService;
+import com.crowdfire.service.SyncService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -22,17 +23,20 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.servlet.ModelAndView;
+import org.springframework.web.servlet.View;
+import org.springframework.web.servlet.view.RedirectView;
 import org.springframework.web.util.UriComponentsBuilder;
+import org.thymeleaf.spring4.view.ThymeleafView;
 
-import javax.servlet.http.HttpServlet;
-import javax.servlet.http.HttpServletResponse;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
+import java.net.URI;
 import java.net.URL;
 import java.sql.Timestamp;
 import java.text.MessageFormat;
 import java.util.*;
+import java.util.concurrent.Future;
 
 /**
  * Created by aniruddha@primaseller.com on 14/7/15.
@@ -42,8 +46,6 @@ import java.util.*;
 @RequestMapping("/api")
 public class UserController {
 
-    private static String FOLLOWER_ENDPOINT_URL = "https://api.instagram.com/v1/users/{0}/followed-by?access_token={1}";
-    private static String POSTS_ENDPOINT_URL = "https://api.instagram.com/v1/users/{0}/media/recent/?access_token={1}";
     //private static String ACCESS_TOKEN = "2048655076.b560c89.8cfea09d85aa427a83c94a4bac8c59f0";
     private static String ACCESS_TOKEN = null;
     private static String redirectUri = "http://localhost:8080/api/auth/instagram/callback";
@@ -64,10 +66,13 @@ public class UserController {
     @Autowired
     BestTimeService bestTimeService;
 
+    @Autowired
+    SyncService syncService;
+
     Logger logger = org.slf4j.LoggerFactory.getLogger(getClass());
 
     @RequestMapping(method = RequestMethod.GET, value = "/auth/instagram/callback")
-    public String fetchAccessToken(@RequestParam(value = "code") String code) {
+    public RedirectView fetchAccessToken(@RequestParam(value = "code") String code) {
         logger.info("Got code: " + code);
 
         MultiValueMap<String, String> params = new LinkedMultiValueMap<String, String>();
@@ -89,54 +94,25 @@ public class UserController {
         } catch (RestClientException re) {
             logger.error(re.toString());
         }
-        return "";
+        return new RedirectView("/authenticated");
     }
 
     @RequestMapping(method = RequestMethod.POST, value = "/followers/{userId}")
     public String fetchFollowers(@PathVariable Long userId) {
-        String url = MessageFormat.format(FOLLOWER_ENDPOINT_URL, userId.toString(), ACCESS_TOKEN);
-        FollowerResp resp = new RestTemplate().getForObject(url, FollowerResp.class);
-
-        for (User follower : resp.getData()) {
-            followerRepository.save(new Follower(follower.getId(), String.valueOf(userId)));
-        }
-
+        Future<FollowerResp> followers = syncService.syncFollowers(ACCESS_TOKEN, userId);
+        while (!followers.isDone()) {}
         return "";
     }
 
     @RequestMapping(method = RequestMethod.POST, value = "/posts/{userId}")
     public String fetchLastPosts(@PathVariable Long userId) {
-        HttpURLConnection connection = null;
-        BufferedReader rd  = null;
-        StringBuilder sb = null;
-        try {
-            URL url = new URL(MessageFormat.format(POSTS_ENDPOINT_URL, userId.toString(), ACCESS_TOKEN));
-             connection = (HttpURLConnection) url.openConnection();
-            connection.setRequestMethod("GET");
-            connection.connect();
-            ObjectMapper mapper = new ObjectMapper();
-            BufferedReader br = new BufferedReader(new InputStreamReader(connection.getInputStream()));
-
-            String line = null;
-            sb = new StringBuilder();
-            while ((line = br.readLine()) != null) {
-                sb.append(line + '\n');
+        Future<UserPostResp> posts = syncService.syncPosts(ACCESS_TOKEN, userId);
+        while (!posts.isDone()) {
+            try {
+                Thread.sleep(10);
+            } catch (InterruptedException ie) {
+                logger.error("Could not sync posts.");
             }
-            JsonObject jsonObject = new JsonParser().parse(sb.toString()).getAsJsonObject();
-            JsonArray posts = jsonObject.get("data").getAsJsonArray();
-            for(JsonElement post : posts) {
-                UserPost userPost = new UserPost();
-                userPost.setUserId(String.valueOf(userId));
-                userPost.setLastPostTimeStamp(new Timestamp(post.getAsJsonObject().get("created_time").getAsLong()*1000L));
-                logger.info("Got post: " + userPost);
-                userPostRepository.save(userPost);
-            }
-
-        } catch (Exception e) {
-            logger.error("error: " + e.getMessage());
-        } finally {
-            if (connection != null)
-                connection.disconnect();
         }
         return "";
     }
@@ -145,13 +121,9 @@ public class UserController {
     public List<String> makeMePopular(@RequestParam(value = "user_id") Long userId,
                                       @RequestParam(value = "num_hours") int num,
                                       @RequestParam(value = "day") int day) {
-
-        // Ideally this should run as a scheduled service
-        // But here I am fetching followers every time the user queries
         fetchFollowers(userId);
         for (Follower follower : followerRepository.findAll()) {
-            // This should also ideally be run as a scheduled service
-            fetchLastPosts(Long.valueOf(follower.getFollowerId()));
+            fetchLastPosts(follower.getFollowerId());
         }
 
         List<String> bestTimes = new ArrayList<>();
@@ -160,7 +132,7 @@ public class UserController {
                 bestTimes.add(new DateTime().withHourOfDay(hour).withMinuteOfHour(0).toString("hh:mm a"));
             }
         } catch (Exception e) {
-            return Arrays.asList(new String[]{e.getMessage()});
+            return Arrays.asList(e.getMessage());
         }
         return bestTimes;
     }

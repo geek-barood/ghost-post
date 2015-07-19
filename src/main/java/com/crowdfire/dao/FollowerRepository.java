@@ -11,6 +11,7 @@ import java.util.List;
  */
 public interface FollowerRepository extends CrudRepository<Follower, Long> {
 
-    List<Follower> findByFollowerId(String follwerId);
-    List<Follower> findByFollowingId(String followingId);
+    List<Follower> findByFollowerId(Long follwerId);
+    List<Follower> findByFollowingId(Long followingId);
+    Follower findByFollowerIdAndFollowingId(Long followerId, Long followingId);
 }

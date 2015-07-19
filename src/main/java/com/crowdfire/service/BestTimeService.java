@@ -4,10 +4,8 @@ import com.crowdfire.dao.FollowerRepository;
 import com.crowdfire.dao.UserPostRepository;
 import com.crowdfire.dao.UserRepository;
 import com.crowdfire.model.Follower;
-import com.crowdfire.model.User;
 import com.crowdfire.model.UserPost;
 import org.joda.time.DateTime;
-import org.joda.time.DateTimeConstants;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -63,11 +61,11 @@ public class BestTimeService {
         }
 
         // This stores for each day for every hour the number of posts from the followers of user
-        List<Follower> followers = followerRepository.findByFollowingId(String.valueOf(userId));
+        List<Follower> followers = followerRepository.findByFollowingId(userId);
         for (Follower follower : followers) {
             List<UserPost> posts = userPostRepository.findByUserId(follower.getFollowerId());
             for (UserPost post : posts) {
-                DateTime timeStamp = new DateTime(post.getLastPostTimeStamp().getTime());
+                DateTime timeStamp = new DateTime(post.getCreatedTimestamp()*1000L);
                 bestTimes[timeStamp.getDayOfWeek()-1][timeStamp.getHourOfDay()].count++;
                 bestTimes[timeStamp.getDayOfWeek()-1][timeStamp.getHourOfDay()].hour = timeStamp.getHourOfDay();
             }

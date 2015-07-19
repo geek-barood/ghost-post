@@ -10,6 +10,6 @@ import java.util.List;
  */
 public interface UserPostRepository extends CrudRepository<UserPost, String> {
 
-    List<UserPost> findByUserId(String userId);
+    List<UserPost> findByUserId(Long userId);
 
 }

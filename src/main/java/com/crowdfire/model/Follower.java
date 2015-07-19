@@ -2,13 +2,15 @@ package com.crowdfire.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.Data;
+import org.joda.time.DateTime;
 
 import javax.persistence.*;
+import javax.persistence.metamodel.StaticMetamodel;
 
 @Data
 @JsonIgnoreProperties(ignoreUnknown = true)
 @Entity
-@Table(name = "insta_follower")
+@Table(name = "insta_follower", uniqueConstraints = {@UniqueConstraint(columnNames = {"follower_id", "following_id"})})
 public class Follower {
 
     @Id
@@ -16,14 +18,14 @@ public class Follower {
     Long id;
 
     @Column(name="follower_id")
-    private String followerId;
+    private Long followerId;
 
     @Column(name="following_id")
-    private String followingId;
+    private Long followingId;
 
     protected Follower() {}
 
-    public Follower(String followerId, String followingId) {
+    public Follower(Long followerId, Long followingId) {
         this.followerId = followerId;
         this.followingId = followingId;
     }
@@ -36,19 +38,19 @@ public class Follower {
         this.id = id;
     }
 
-    public String getFollowerId() {
+    public Long getFollowerId() {
         return followerId;
     }
 
-    public void setFollowerId(String followerId) {
+    public void setFollowerId(Long followerId) {
         this.followerId = followerId;
     }
 
-    public String getFollowingId() {
+    public Long getFollowingId() {
         return followingId;
     }
 
-    public void setFollowingId(String followingId) {
+    public void setFollowingId(Long followingId) {
         this.followingId = followingId;
     }
 }
